@@ -146,7 +146,8 @@ CombatDamage Combat::getCombatDamage(const CreaturePtr& creature, const Creature
 	// because if there were callbacks they would have returned already
 	if (formulaType == COMBAT_FORMULA_LEVELMAGIC) 
 	{
-		const int32_t levelFormula = player->getLevel() * 2 + player->getMagicLevel() * 3;
+		// INT replaces magic level for spell damage formula
+		const int32_t levelFormula = player->getLevel() * 2 + player->getEffectiveIntelligence() * 3;
 		damage.primary.value = normal_random(
 			std::fma(levelFormula, mina, minb),
 			std::fma(levelFormula, maxa, maxb)
@@ -1605,7 +1606,7 @@ void ValueCallback::getMinMaxValues(const PlayerPtr& player, CombatDamage& damag
 		case COMBAT_FORMULA_LEVELMAGIC: {
 			//onGetPlayerMinMaxValues(player, level, maglevel)
 			lua_pushinteger(L, player->getLevel());
-			lua_pushinteger(L, player->getMagicLevel());
+			lua_pushinteger(L, player->getEffectiveIntelligence());
 			parameters += 2;
 			break;
 		}

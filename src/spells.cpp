@@ -390,7 +390,8 @@ bool Spell::playerSpellCheck(const PlayerPtr& player) const
 		return false;
 	}
 
-	if (player->getMagicLevel() < magLevel) {
+	// INT replaces magic level requirement for casting spells
+	if (player->getStatIntelligence() < magLevel) {
 		player->sendCancelMessage(RETURNVALUE_NOTENOUGHMAGICLEVEL);
 		g_game.addMagicEffect(player->getPosition(), CONST_ME_POFF);
 		return false;
@@ -414,10 +415,6 @@ bool Spell::playerSpellCheck(const PlayerPtr& player) const
 			g_game.addMagicEffect(player->getPosition(), CONST_ME_POFF);
 			return false;
 		}
-	} else if (!vocSpellMap.empty() && vocSpellMap.find(player->getVocationId()) == vocSpellMap.end()) {
-		player->sendCancelMessage(RETURNVALUE_YOURVOCATIONCANNOTUSETHISSPELL);
-		g_game.addMagicEffect(player->getPosition(), CONST_ME_POFF);
-		return false;
 	}
 
 	if (needWeapon) {
@@ -425,7 +422,7 @@ bool Spell::playerSpellCheck(const PlayerPtr& player) const
 			case WEAPON_SWORD:
 			case WEAPON_CLUB:
 			case WEAPON_AXE:
-            case WEAPON_DISTANCE:
+			case WEAPON_DISTANCE:
 			case WEAPON_WAND:
 				break;
 
@@ -600,7 +597,6 @@ void Spell::postCastSpell(const PlayerPtr& player, bool finishedCast /*= true*/,
 void Spell::postCastSpell(const PlayerPtr& player, uint32_t manaCost, uint32_t soulCost)
 {
     if (manaCost > 0) {
-        player->addManaSpent(manaCost);
         player->changeMana(-static_cast<int32_t>(manaCost));
     }
 

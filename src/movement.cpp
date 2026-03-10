@@ -673,16 +673,12 @@ uint32_t MoveEvent::RemoveItemField(const ItemPtr&, const ItemPtr&, const Positi
 ReturnValue MoveEvent::EquipItem(MoveEvent* moveEvent, const PlayerPtr& player, const ItemPtr& item, slots_t slot, bool isCheck)
 {
 	if (!player->hasFlag(PlayerFlag_IgnoreWeaponCheck) && moveEvent->getWieldInfo() != 0) {
-		const VocEquipMap& vocEquipMap = moveEvent->getVocEquipMap();
-		if (!vocEquipMap.empty() && !vocEquipMap.contains(player->getVocationId())) {
-			return RETURNVALUE_YOUDONTHAVEREQUIREDPROFESSION;
-		}
-
 		if (player->getLevel() < moveEvent->getReqLevel()) {
 			return RETURNVALUE_NOTENOUGHLEVEL;
 		}
 
-		if (player->getMagicLevel() < moveEvent->getReqMagLv()) {
+		// INT replaces magic level requirement for equipping items
+		if (player->getEffectiveIntelligence() < moveEvent->getReqMagLv()) {
 			return RETURNVALUE_NOTENOUGHMAGICLEVEL;
 		}
 
@@ -752,26 +748,16 @@ ReturnValue MoveEvent::EquipItem(MoveEvent* moveEvent, const PlayerPtr& player, 
 		player->addCondition(condition);
 	}
 
-	//skill modifiers
-	bool needUpdateSkills = false;
-
-	for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
-		if (it.abilities->skills[i]) {
-			needUpdateSkills = true;
-			player->setVarSkill(static_cast<skills_t>(i), it.abilities->skills[i]);
-		}
-	}
+	// Special skill modifiers (crit, leech etc) still apply
+	bool needUpdateStats = false;
 
 	for (int32_t i = SPECIALSKILL_FIRST; i <= SPECIALSKILL_LAST; ++i) {
 		if (it.abilities->specialSkills[i]) {
-			needUpdateSkills = true;
 			player->setVarSpecialSkill(static_cast<SpecialSkills_t>(i), it.abilities->specialSkills[i]);
 		}
 	}
 
-	//stat modifiers
-	bool needUpdateStats = false;
-
+	// stat modifiers
 	for (int32_t s = STAT_FIRST; s <= STAT_LAST; ++s) {
 		if (it.abilities->stats[s]) {
 			needUpdateStats = true;
@@ -782,10 +768,6 @@ ReturnValue MoveEvent::EquipItem(MoveEvent* moveEvent, const PlayerPtr& player, 
 			needUpdateStats = true;
 			player->setVarStats(static_cast<stats_t>(s), static_cast<int32_t>(player->getDefaultStats(static_cast<stats_t>(s)) * ((it.abilities->statsPercent[s] - 100) / 100.f)));
 		}
-	}
-
-	if (needUpdateSkills) {
-		player->sendSkills();
 	}
 
 	if (needUpdateStats) {
@@ -834,24 +816,14 @@ ReturnValue MoveEvent::DeEquipItem(MoveEvent*, const PlayerPtr& player, const It
 		player->removeCondition(CONDITION_REGENERATION, static_cast<ConditionId_t>(slot));
 	}
 
-	//skill modifiers
-	bool needUpdateSkills = false;
-
-	for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
-		if (it.abilities->skills[i] != 0) {
-			needUpdateSkills = true;
-			player->setVarSkill(static_cast<skills_t>(i), -it.abilities->skills[i]);
-		}
-	}
-
+	// Special skill modifiers (crit, leech etc) still apply
 	for (int32_t i = SPECIALSKILL_FIRST; i <= SPECIALSKILL_LAST; ++i) {
 		if (it.abilities->specialSkills[i] != 0) {
-			needUpdateSkills = true;
 			player->setVarSpecialSkill(static_cast<SpecialSkills_t>(i), -it.abilities->specialSkills[i]);
 		}
 	}
 
-	//stat modifiers
+	// stat modifiers
 	bool needUpdateStats = false;
 
 	for (int32_t s = STAT_FIRST; s <= STAT_LAST; ++s) {
@@ -864,11 +836,6 @@ ReturnValue MoveEvent::DeEquipItem(MoveEvent*, const PlayerPtr& player, const It
 			needUpdateStats = true;
 			player->setVarStats(static_cast<stats_t>(s), -static_cast<int32_t>(player->getDefaultStats(static_cast<stats_t>(s)) * ((it.abilities->statsPercent[s] - 100) / 100.f)));
 		}
-	}
-
-	if (needUpdateSkills) {
-		std::cout << "Skills updated!" << std::endl;
-		player->sendSkills();
 	}
 
 	if (needUpdateStats) {

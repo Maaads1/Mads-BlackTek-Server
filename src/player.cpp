@@ -45,7 +45,8 @@ void Player::updateBaseSpeed()
 {
 	if (not hasFlag(PlayerFlag_SetMaxSpeed)) {
 		const int32_t speedPerLevel = g_config.getNumber(ConfigManager::PLAYER_SPEED_PER_LEVEL);
-		baseSpeed = vocation->getBaseSpeed() + (speedPerLevel * (level - 1));
+		// Base speed from levels + DEX bonus (each DEX point = 2 levels worth of speed)
+		baseSpeed = 220 + (speedPerLevel * (level - 1)) + (getEffectiveDexterity() * speedPerLevel * 2);
 	} else {
 		baseSpeed = g_config.getNumber(ConfigManager::PLAYER_MAX_SPEED);
 	}
@@ -758,10 +759,8 @@ std::string Player::getDescription(const int32_t lookDistance)
 
 		if (group->access) {
 			s << " You are " << group->name << '.';
-		} else if (vocation->getId() != VOCATION_NONE) {
-			s << " You are " << vocation->getVocDescription() << '.';
 		} else {
-			s << " You have no vocation.";
+			s << " You are " << synergyTitle << '.';
 		}
 	} else {
 		s << name;
@@ -778,10 +777,8 @@ std::string Player::getDescription(const int32_t lookDistance)
 
 		if (group->access) {
 			s << " is " << group->name << '.';
-		} else if (vocation->getId() != VOCATION_NONE) {
-			s << " is " << vocation->getVocDescription() << '.';
 		} else {
-			s << " has no vocation.";
+			s << " is " << synergyTitle << '.';
 		}
 	}
 
@@ -933,39 +930,28 @@ WeaponType_t Player::getWeaponType() const
 int32_t Player::getWeaponSkill(const ItemConstPtr& item) const
 {
 	if (!item) {
-		return getSkillLevel(SKILL_FIST);
+		// Fist fighting uses STR
+		return getEffectiveStrength();
 	}
-
-	int32_t attackSkill;
 
 	const WeaponType_t weaponType = item->getWeaponType();
 	switch (weaponType) {
-		case WEAPON_SWORD: {
-			attackSkill = getSkillLevel(SKILL_SWORD);
-			break;
-		}
-
-		case WEAPON_CLUB: {
-			attackSkill = getSkillLevel(SKILL_CLUB);
-			break;
-		}
-
+		case WEAPON_SWORD:
+		case WEAPON_CLUB:
 		case WEAPON_AXE: {
-			attackSkill = getSkillLevel(SKILL_AXE);
-			break;
+			// Power: all melee weapons scale with STR
+			return getEffectiveStrength();
 		}
 
 		case WEAPON_DISTANCE: {
-			attackSkill = getSkillLevel(SKILL_DISTANCE);
-			break;
+			// Predator's Flow: distance weapons scale with DEX
+			return getEffectiveDexterity();
 		}
 
 		default: {
-			attackSkill = 0;
-			break;
+			return 0;
 		}
 	}
-	return attackSkill;
 }
 
 int32_t Player::getArmor() const
@@ -978,12 +964,11 @@ int32_t Player::getArmor() const
 			armor += inventoryItem->getArmor();
 		}
 	}
-	return static_cast<int32_t>(armor * vocation->armorMultiplier);
+	return armor;
 }
 
 int32_t Player::getDefense() const
 {
-	int32_t defenseSkill = getSkillLevel(SKILL_FIST);
 	int32_t defenseValue = 7;
 
 	ItemPtr leftHand = getInventoryItem(CONST_SLOT_LEFT);
@@ -991,11 +976,6 @@ int32_t Player::getDefense() const
 	ItemPtr shield;
 	ItemPtr weapon;
 
-	// We aren't going to waste precious CPU cycles or memory trying to determine which item
-	// has highest defense if you happen to have two shields, two quivers, or a shield
-	// and a quiver in each hand... in this case we are just gonna end up using left hand
-	// So if this is something that concerns you, you can go back to looping and using switches
-	// and storing variables to keep track of highest defense and do the math and all that yourself.
 	if (leftHand and (leftHand->getWeaponType() == WEAPON_SHIELD or leftHand->getWeaponType() == WEAPON_QUIVER))
 	{
 		shield = leftHand;
@@ -1012,47 +992,52 @@ int32_t Player::getDefense() const
 			weapon = leftHand;
 		}
 	}
-	else 
+	else
 	{
 		if (rightHand and rightHand->getWeaponType() != WEAPON_SHIELD and rightHand->getWeaponType() != WEAPON_QUIVER)
 		{
 			weapon = rightHand;
-		} 
+		}
 		else if (leftHand and leftHand->getWeaponType() != WEAPON_SHIELD and leftHand->getWeaponType() != WEAPON_QUIVER)
 		{
 			weapon = leftHand;
 		}
 	}
-	
+
 	if (weapon) {
 		defenseValue = weapon->getDefense() + weapon->getExtraDefense();
-		defenseSkill = getWeaponSkill(weapon);
 	}
 
 	if (shield) {
 		defenseValue = weapon != nullptr ? shield->getDefense() + weapon->getExtraDefense() : shield->getDefense();
-		defenseSkill = getSkillLevel(SKILL_SHIELD);
 	}
 
-	if (defenseSkill == 0) {
+	// Guard: each STR point contributes the defensive value of 1 shielding skill
+	// Formula mirrors original shielding: (skill / 4. + 2.23) * defenseValue * 0.15
+	int32_t guardSkill = getEffectiveStrength();
+
+	if (guardSkill == 0) {
 		switch (fightMode) {
 			case FIGHTMODE_ATTACK:
 			case FIGHTMODE_BALANCED:
 				return 1;
-
 			case FIGHTMODE_DEFENSE:
 				return 2;
 		}
 	}
 
-	return (defenseSkill / 4. + 2.23) * defenseValue * 0.15 * getDefenseFactor() * vocation->defenseMultiplier;
+	return (guardSkill / 4. + 2.23) * defenseValue * 0.15 * getDefenseFactor();
 }
 
 uint32_t Player::getAttackSpeed() const
 {
 	const auto& weapon = getWeapon(true);
 	if (!weapon || weapon->getAttackSpeed() == 0) {
-		return vocation->getAttackSpeed();
+		// Base attack speed modified by DEX (Swiftness)
+		// Each DEX point reduces attack speed by 10ms (lower = faster)
+		uint32_t baseSpeed = 2000;
+		uint32_t dexBonus = getEffectiveDexterity() * 10;
+		return std::max<uint32_t>(500, baseSpeed - dexBonus);
 	}
 
 	return weapon->getAttackSpeed();
@@ -1128,94 +1113,6 @@ void Player::updateInventoryWeight()
 	}
 }
 
-void Player::addSkillAdvance(skills_t skill, uint64_t count)
-{
-	uint64_t currReqTries = vocation->getReqSkillTries(skill, skills[skill].level);
-	uint64_t nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
-	if (currReqTries >= nextReqTries) {
-		//player has reached max skill
-		return;
-	}
-
-	g_events->eventPlayerOnGainSkillTries(this->getPlayer(), skill, count);
-	if (count == 0) {
-		return;
-	}
-
-	bool sendUpdateSkills = false;
-	while ((skills[skill].tries + count) >= nextReqTries) {
-		count -= nextReqTries - skills[skill].tries;
-		skills[skill].level++;
-		skills[skill].tries = 0;
-		skills[skill].percent = 0;
-
-		sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You advanced to {:s} level {:d}.", getSkillName(skill), skills[skill].level));
-
-		g_creatureEvents->playerAdvance(this->getPlayer(), skill, (skills[skill].level - 1), skills[skill].level);
-
-		sendUpdateSkills = true;
-		currReqTries = nextReqTries;
-		nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
-		if (currReqTries >= nextReqTries) {
-			count = 0;
-			break;
-		}
-	}
-
-	skills[skill].tries += count;
-
-	uint32_t newPercent;
-	if (nextReqTries > currReqTries) {
-		newPercent = Player::getPercentLevel(skills[skill].tries, nextReqTries);
-	} else {
-		newPercent = 0;
-	}
-
-	if (skills[skill].percent != newPercent) {
-		skills[skill].percent = newPercent;
-		sendUpdateSkills = true;
-	}
-
-	if (sendUpdateSkills) {
-		sendSkills();
-	}
-}
-
-void Player::removeSkillTries(const skills_t skill, uint64_t count, const bool notify/* = false*/)
-{
-	uint16_t oldLevel = skills[skill].level;
-	uint8_t oldPercent = skills[skill].percent;
-
-	while (count > skills[skill].tries) {
-		count -= skills[skill].tries;
-
-		if (skills[skill].level <= MINIMUM_SKILL_LEVEL) {
-			skills[skill].level = MINIMUM_SKILL_LEVEL;
-			skills[skill].tries = 0;
-			count = 0;
-			break;
-		}
-
-		skills[skill].tries = vocation->getReqSkillTries(skill, skills[skill].level);
-		skills[skill].level--;
-	}
-
-	skills[skill].tries = std::max<int32_t>(0, skills[skill].tries - count);
-	skills[skill].percent = Player::getPercentLevel(skills[skill].tries, vocation->getReqSkillTries(skill, skills[skill].level));
-
-	if (notify) {
-		bool sendUpdateSkills = false;
-		if (oldLevel != skills[skill].level) {
-			sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You were downgraded to {:s} level {:d}.", getSkillName(skill), skills[skill].level));
-			sendUpdateSkills = true;
-		}
-
-		if (sendUpdateSkills || oldPercent != skills[skill].percent) {
-			sendSkills();
-		}
-	}
-}
-
 void Player::setVarStats(const stats_t stat, const int32_t modifier)
 {
 	varStats[stat] += modifier;
@@ -1248,7 +1145,6 @@ int32_t Player::getDefaultStats(const stats_t stat) const
 	switch (stat) {
 		case STAT_MAXHITPOINTS: return healthMax;
 		case STAT_MAXMANAPOINTS: return manaMax;
-		case STAT_MAGICPOINTS: return getBaseMagicLevel();
 		default: return 0;
 	}
 }
@@ -1615,7 +1511,6 @@ void Player::sendStats()
 {
 	if (client) {
 		client->sendStats();
-		lastStatsTrainingTime = getOfflineTrainingTime() / 60 / 1000;
 	}
 }
 
@@ -1638,7 +1533,8 @@ void Player::sendPing()
 		setAttackedCreature(nullptr);
 	}
 
-	int32_t noPongKickTime = vocation->getNoPongKickTime();
+	// Fixed no-pong kick time of 60 seconds (was vocation-based)
+	int32_t noPongKickTime = 60000;
 	if (pzLocked && noPongKickTime < 60000) {
 		noPongKickTime = 60000;
 	}
@@ -2254,22 +2150,16 @@ void Player::onThink(const uint32_t interval)
 
 	// if (isImbued()) { // TODO: Reimplement a check like this to first see if player has any items, then items with imbuements before decaying.
 		for (int32_t slot = CONST_SLOT_FIRST; slot <= CONST_SLOT_LAST; ++slot) {
-			const auto& item = inventory[slot];
-			if (item && item->hasImbuements()) {
-				item->decayImbuements(hasCondition(CONDITION_INFIGHT));
-				sendSkills();
-				sendStats();
-			}
-		}
+    const auto& item = inventory[slot];
+    if (item && item->hasImbuements()) {
+        item->decayImbuements(hasCondition(CONDITION_INFIGHT));
+        sendStats();
+    }
+}
 	// } // part of the above TODO:
 
 	if (g_game.getWorldType() != WORLD_TYPE_PVP_ENFORCED) {
 		checkSkullTicks(interval / 1000);
-	}
-
-	addOfflineTrainingTime(interval);
-	if (lastStatsTrainingTime != getOfflineTrainingTime() / 60 / 1000) {
-		sendStats();
 	}
 }
 
@@ -2337,98 +2227,6 @@ void Player::drainMana(const CreaturePtr& attacker, const int32_t manaLoss)
 	sendStats();
 }
 
-void Player::addManaSpent(uint64_t amount)
-{
-	if (hasFlag(PlayerFlag_NotGainMana)) {
-		return;
-	}
-
-	uint64_t currReqMana = vocation->getReqMana(magLevel);
-	uint64_t nextReqMana = vocation->getReqMana(magLevel + 1);
-	if (currReqMana >= nextReqMana) {
-		//player has reached max magic level
-		return;
-	}
-
-	g_events->eventPlayerOnGainSkillTries(this->getPlayer(), SKILL_MAGLEVEL, amount);
-	if (amount == 0) {
-		return;
-	}
-
-	bool sendUpdateStats = false;
-	while ((manaSpent + amount) >= nextReqMana) {
-		amount -= nextReqMana - manaSpent;
-
-		magLevel++;
-		manaSpent = 0;
-
-		sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You advanced to magic level {:d}.", magLevel));
-
-		g_creatureEvents->playerAdvance(this->getPlayer(), SKILL_MAGLEVEL, magLevel - 1, magLevel);
-
-		sendUpdateStats = true;
-		currReqMana = nextReqMana;
-		nextReqMana = vocation->getReqMana(magLevel + 1);
-		if (currReqMana >= nextReqMana) {
-			return;
-		}
-	}
-
-	manaSpent += amount;
-
-	uint8_t oldPercent = magLevelPercent;
-	if (nextReqMana > currReqMana) {
-		magLevelPercent = Player::getPercentLevel(manaSpent, nextReqMana);
-	} else {
-		magLevelPercent = 0;
-	}
-
-	if (oldPercent != magLevelPercent) {
-		sendUpdateStats = true;
-	}
-
-	if (sendUpdateStats) {
-		sendStats();
-	}
-}
-
-void Player::removeManaSpent(uint64_t amount, const bool notify/* = false*/)
-{
-	if (amount == 0) {
-		return;
-	}
-
-	const uint32_t oldLevel = magLevel;
-	const uint8_t oldPercent = magLevelPercent;
-
-	while (amount > manaSpent && magLevel > 0) {
-		amount -= manaSpent;
-		manaSpent = vocation->getReqMana(magLevel);
-		magLevel--;
-	}
-
-	manaSpent -= amount;
-
-	uint64_t nextReqMana = vocation->getReqMana(magLevel + 1);
-	if (nextReqMana > vocation->getReqMana(magLevel)) {
-		magLevelPercent = Player::getPercentLevel(manaSpent, nextReqMana);
-	} else {
-		magLevelPercent = 0;
-	}
-
-	if (notify) {
-		bool sendUpdateStats = false;
-		if (oldLevel != magLevel) {
-			sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You were downgraded to magic level {:d}.", magLevel));
-			sendUpdateStats = true;
-		}
-
-		if (sendUpdateStats || oldPercent != magLevelPercent) {
-			sendStats();
-		}
-	}
-}
-
 void Player::addExperience(const CreaturePtr& source, uint64_t exp, bool sendText/* = false*/)
 {
 	uint64_t currLevelExp = Player::getExpForLevel(level);
@@ -2473,11 +2271,20 @@ void Player::addExperience(const CreaturePtr& source, uint64_t exp, bool sendTex
 	uint32_t prevLevel = level;
 	while (experience >= nextLevelExp) {
 		++level;
-		healthMax += vocation->getHPGain();
-		health += vocation->getHPGain();
-		manaMax += vocation->getManaGain();
-		mana += vocation->getManaGain();
-		capacity += vocation->getCapGain();
+
+		// Award attribute points and mastery points on level up
+		attr_points += 3;
+		if (level > 1) {
+			mastery_points += 1;
+		}
+
+		// Recalculate HP/mana/cap from stats instead of vocation gains
+		healthMax = 150 + (getEffectiveStrength() * 15) + (getEffectiveDexterity() * 10);
+		manaMax = getEffectiveIntelligence() * 25;
+		capacity = 40000 + (getEffectiveStrength() * 150) + (getEffectiveDexterity() * 100);
+
+		health += 15;
+		mana += 5;
 
 		currLevelExp = nextLevelExp;
 		nextLevelExp = Player::getExpForLevel(level + 1);
@@ -2509,6 +2316,7 @@ void Player::addExperience(const CreaturePtr& source, uint64_t exp, bool sendTex
 		g_creatureEvents->playerAdvance(this->getPlayer(), SKILL_LEVEL, prevLevel, level);
 
 		sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You advanced from Level {:d} to Level {:d}.", prevLevel, level));
+		sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You have {:d} attribute points and {:d} mastery points to spend.", attr_points, mastery_points));
 	}
 
 	if (nextLevelExp > currLevelExp) {
@@ -2562,9 +2370,10 @@ void Player::removeExperience(uint64_t exp, const bool sendText/* = false*/)
 
 	while (level > 1 && experience < currLevelExp) {
 		--level;
-		healthMax = std::max<int32_t>(0, healthMax - vocation->getHPGain());
-		manaMax = std::max<int32_t>(0, manaMax - vocation->getManaGain());
-		capacity = std::max<int32_t>(0, capacity - vocation->getCapGain());
+		// Recalculate from stats instead of subtracting vocation gains
+		healthMax = std::max<int32_t>(1, 150 + (getEffectiveStrength() * 15) + (getEffectiveDexterity() * 10));
+		manaMax = std::max<int32_t>(0, getEffectiveIntelligence() * 25);
+		capacity = std::max<int32_t>(0, 40000 + (getEffectiveStrength() * 150) + (getEffectiveDexterity() * 100));
 		currLevelExp = Player::getExpForLevel(level);
 	}
 
@@ -2616,10 +2425,6 @@ void Player::onBlockHit()
 {
 	if (shieldBlockCount > 0) {
 		--shieldBlockCount;
-
-		if (hasShield()) {
-			addSkillAdvance(SKILL_SHIELD, 1);
-		}
 	}
 }
 
@@ -2719,26 +2524,7 @@ void Player::death(const CreaturePtr& lastHitCreature)
 			}
 		}
 
-		//Magic level loss
-		uint64_t sumMana = 0;
-		for (uint32_t i = 1; i <= magLevel; ++i) {
-			sumMana += vocation->getReqMana(i);
-		}
-
 		double deathLossPercent = getLostPercent() * (unfairFightReduction / 100.);
-		removeManaSpent(static_cast<uint64_t>((sumMana + manaSpent) * deathLossPercent), false);
-
-		//Skill loss
-		for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) { //for each skill
-			uint64_t sumSkillTries = 0;
-			for (uint16_t c = MINIMUM_SKILL_LEVEL + 1; c <= skills[i].level; ++c) { //sum up all required tries for all skill levels
-				sumSkillTries += vocation->getReqSkillTries(i, c);
-			}
-
-			sumSkillTries += skills[i].tries;
-
-			removeSkillTries(static_cast<skills_t>(i), sumSkillTries * deathLossPercent, false);
-		}
 
 		//Level loss
 		uint64_t expLoss = static_cast<uint64_t>(experience * deathLossPercent);
@@ -2747,19 +2533,29 @@ void Player::death(const CreaturePtr& lastHitCreature)
 		if (expLoss != 0) {
 			uint32_t oldLevel = level;
 
-			if (vocation->getId() == VOCATION_NONE || level > 7) {
-				experience -= expLoss;
-			}
+			experience -= expLoss;
 
 			while (level > 1 && experience < Player::getExpForLevel(level)) {
 				--level;
-				healthMax = std::max<int32_t>(0, healthMax - vocation->getHPGain());
-				manaMax = std::max<int32_t>(0, manaMax - vocation->getManaGain());
-				capacity = std::max<int32_t>(0, capacity - vocation->getCapGain());
+				// Recalculate HP/mana/cap from stats on level loss
+				healthMax = std::max<int32_t>(1, 150 + (getEffectiveStrength() * 15) + (getEffectiveDexterity() * 10));
+				manaMax = std::max<int32_t>(0, getEffectiveIntelligence() * 25);
+				capacity = std::max<int32_t>(0, 40000 + (getEffectiveStrength() * 150) + (getEffectiveDexterity() * 100));
 			}
 
 			if (oldLevel != level) {
+    			uint32_t levelsLost = oldLevel - level;
+
+    			// Remove 3 attribute points and 1 mastery point per level lost
+    			// Can't go below 0
+    			uint32_t attrPointsLost = levelsLost * 3;
+    			uint32_t masteryPointsLost = levelsLost * 1;
+
+    			attr_points = std::max<int32_t>(0, attr_points - attrPointsLost);
+    			mastery_points = std::max<int32_t>(0, mastery_points - masteryPointsLost);
+
 				sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You were downgraded from Level {:d} to Level {:d}.", oldLevel, level));
+				sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You lost {:d} attribute points and {:d} mastery points.", attrPointsLost, masteryPointsLost));
 			}
 
 			uint64_t currLevelExp = Player::getExpForLevel(level);
@@ -2783,7 +2579,6 @@ void Player::death(const CreaturePtr& lastHitCreature)
 		}
 
 		sendStats();
-		sendSkills();
 		sendReLoginWindow(unfairFightReduction);
 
 		if (getSkull() == SKULL_BLACK) {
@@ -2799,7 +2594,6 @@ void Player::death(const CreaturePtr& lastHitCreature)
 			Condition* condition = *it;
 			if (condition->isPersistent()) {
 				it = conditions.erase(it);
-
 				condition->endCondition(this->getPlayer());
 				onEndCondition(condition->getType());
 				delete condition;
@@ -2815,7 +2609,6 @@ void Player::death(const CreaturePtr& lastHitCreature)
 			Condition* condition = *it;
 			if (condition->isPersistent()) {
 				it = conditions.erase(it);
-
 				condition->endCondition(this->getPlayer());
 				onEndCondition(condition->getType());
 				delete condition;
@@ -4531,7 +4324,7 @@ void Player::changeMana(int32_t manaChange)
 void Player::changeSoul(int32_t soulChange)
 {
 	if (soulChange > 0) {
-		soul += std::min<int32_t>(soulChange, vocation->getSoulMax() - soul);
+		soul += std::min<int32_t>(soulChange, 100 - soul);
 	} else {
 		soul = std::max<int32_t>(0, soul + soulChange);
 	}
@@ -4803,20 +4596,10 @@ void Player::checkSkullTicks(const int64_t ticks)
 	}
 }
 
-bool Player::isPromoted() const
-{
-	uint16_t promotedVocation = g_vocations.getPromotedVocation(vocation->getId());
-	return promotedVocation == VOCATION_NONE && vocation->getId() != promotedVocation;
-}
-
 double Player::getLostPercent() const
 {
 	int32_t deathLosePercent = g_config.getNumber(ConfigManager::DEATH_LOSE_PERCENT);
 	if (deathLosePercent != -1) {
-		if (isPromoted()) {
-			deathLosePercent -= 3;
-		}
-
 		deathLosePercent -= blessings.count();
 		return std::max<int32_t>(0, deathLosePercent) / 100.;
 	}
@@ -4829,11 +4612,8 @@ double Player::getLostPercent() const
 		lossPercent = 10;
 	}
 
-	double percentReduction = 0;
-	if (isPromoted()) {
-		percentReduction += 30;
-	}
-	percentReduction += blessings.count() * 8;
+	// Blessings still reduce loss, promotion reduction removed
+	double percentReduction = blessings.count() * 8;
 	return lossPercent * (1 - (percentReduction / 100.)) / 100.;
 }
 
@@ -5208,132 +4988,6 @@ void Player::dismount()
 	defaultOutfit.lookMount = 0;
 }
 
-bool Player::addOfflineTrainingTries(skills_t skill, uint64_t tries)
-{
-	if (tries == 0 || skill == SKILL_LEVEL) {
-		return false;
-	}
-
-	bool sendUpdate = false;
-	uint32_t oldSkillValue, newSkillValue;
-	long double oldPercentToNextLevel, newPercentToNextLevel;
-
-	if (skill == SKILL_MAGLEVEL) {
-		uint64_t currReqMana = vocation->getReqMana(magLevel);
-		uint64_t nextReqMana = vocation->getReqMana(magLevel + 1);
-
-		if (currReqMana >= nextReqMana) {
-			return false;
-		}
-
-		oldSkillValue = magLevel;
-		oldPercentToNextLevel = static_cast<long double>(manaSpent * 100) / nextReqMana;
-
-		g_events->eventPlayerOnGainSkillTries(this->getPlayer(), SKILL_MAGLEVEL, tries);
-		uint32_t currMagLevel = magLevel;
-
-		while ((manaSpent + tries) >= nextReqMana) {
-			tries -= nextReqMana - manaSpent;
-
-			magLevel++;
-			manaSpent = 0;
-
-			g_creatureEvents->playerAdvance(this->getPlayer(), SKILL_MAGLEVEL, magLevel - 1, magLevel);
-
-			sendUpdate = true;
-			currReqMana = nextReqMana;
-			nextReqMana = vocation->getReqMana(magLevel + 1);
-
-			if (currReqMana >= nextReqMana) {
-				tries = 0;
-				break;
-			}
-		}
-
-		manaSpent += tries;
-
-		if (magLevel != currMagLevel) {
-			sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You advanced to magic level {:d}.", magLevel));
-		}
-
-		uint8_t newPercent;
-		if (nextReqMana > currReqMana) {
-			newPercent = Player::getPercentLevel(manaSpent, nextReqMana);
-			newPercentToNextLevel = static_cast<long double>(manaSpent * 100) / nextReqMana;
-		} else {
-			newPercent = 0;
-			newPercentToNextLevel = 0;
-		}
-
-		if (newPercent != magLevelPercent) {
-			magLevelPercent = newPercent;
-			sendUpdate = true;
-		}
-
-		newSkillValue = magLevel;
-	} else {
-		uint64_t currReqTries = vocation->getReqSkillTries(skill, skills[skill].level);
-		uint64_t nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
-		if (currReqTries >= nextReqTries) {
-			return false;
-		}
-
-		oldSkillValue = skills[skill].level;
-		oldPercentToNextLevel = static_cast<long double>(skills[skill].tries * 100) / nextReqTries;
-
-		g_events->eventPlayerOnGainSkillTries(this->getPlayer(), skill, tries);
-		uint32_t currSkillLevel = skills[skill].level;
-
-		while ((skills[skill].tries + tries) >= nextReqTries) {
-			tries -= nextReqTries - skills[skill].tries;
-
-			skills[skill].level++;
-			skills[skill].tries = 0;
-			skills[skill].percent = 0;
-
-			g_creatureEvents->playerAdvance(this->getPlayer(), skill, (skills[skill].level - 1), skills[skill].level);
-
-			sendUpdate = true;
-			currReqTries = nextReqTries;
-			nextReqTries = vocation->getReqSkillTries(skill, skills[skill].level + 1);
-
-			if (currReqTries >= nextReqTries) {
-				tries = 0;
-				break;
-			}
-		}
-
-		skills[skill].tries += tries;
-
-		if (currSkillLevel != skills[skill].level) {
-			sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("You advanced to {:s} level {:d}.", getSkillName(skill), skills[skill].level));
-		}
-
-		uint8_t newPercent;
-		if (nextReqTries > currReqTries) {
-			newPercent = Player::getPercentLevel(skills[skill].tries, nextReqTries);
-			newPercentToNextLevel = static_cast<long double>(skills[skill].tries * 100) / nextReqTries;
-		} else {
-			newPercent = 0;
-			newPercentToNextLevel = 0;
-		}
-
-		if (skills[skill].percent != newPercent) {
-			skills[skill].percent = newPercent;
-			sendUpdate = true;
-		}
-
-		newSkillValue = skills[skill].level;
-	}
-
-	if (sendUpdate) {
-		sendSkills();
-	}
-
-	sendTextMessage(MESSAGE_EVENT_ADVANCE, fmt::format("Your {:s} skill changed from level {:d} (with {:.2f}% progress towards level {:d}) to level {:d} (with {:.2f}% progress towards level {:d})", ucwords(getSkillName(skill)), oldSkillValue, oldPercentToNextLevel, (oldSkillValue + 1), newSkillValue, newPercentToNextLevel, (newSkillValue + 1)));
-	return sendUpdate;
-}
-
 bool Player::hasModalWindowOpen(const uint32_t modalWindowId) const
 {
 	return std::ranges::find(modalWindows, modalWindowId) != modalWindows.end();
@@ -5618,18 +5272,25 @@ void Player::setGuild(Guild_ptr guild)
 
 void Player::updateRegeneration() const
 {
-	if (!vocation) {
-		return;
-	}
-
 	Condition* condition = getCondition(CONDITION_REGENERATION, CONDITIONID_DEFAULT);
 	if (condition) {
-		condition->setParam(CONDITION_PARAM_HEALTHGAIN, vocation->getHealthGainAmount());
-		condition->setParam(CONDITION_PARAM_HEALTHTICKS, vocation->getHealthGainTicks() * 1000);
-		condition->setParam(CONDITION_PARAM_MANAGAIN, vocation->getManaGainAmount());
-		condition->setParam(CONDITION_PARAM_MANATICKS, vocation->getManaGainTicks() * 1000);
-		condition->setParam(CONDITION_PARAM_SOULGAIN, vocation->getSoulGainAmount());
-		condition->setParam(CONDITION_PARAM_SOULTICKS, vocation->getSoulGainTicks() * 1000);
+		// Resilience: STR boosts HP regeneration rate
+		int32_t healthGain = 10 + (getEffectiveStrength() / 5);
+		int32_t healthTicks = 6000;
+
+		// Attunement: INT boosts mana regeneration rate
+		int32_t manaGain = 10 + (getEffectiveIntelligence() / 5);
+		int32_t manaTicks = 6000;
+
+		int32_t soulGain = 1;
+		int32_t soulTicks = 30000;
+
+		condition->setParam(CONDITION_PARAM_HEALTHGAIN, healthGain);
+		condition->setParam(CONDITION_PARAM_HEALTHTICKS, healthTicks);
+		condition->setParam(CONDITION_PARAM_MANAGAIN, manaGain);
+		condition->setParam(CONDITION_PARAM_MANATICKS, manaTicks);
+		condition->setParam(CONDITION_PARAM_SOULGAIN, soulGain);
+		condition->setParam(CONDITION_PARAM_SOULTICKS, soulTicks);
 	}
 }
 
@@ -5639,29 +5300,27 @@ void Player::addItemImbuements(const ItemPtr& item) {
 		for (auto& imbue : *imbues) {
 			if (imbue->isSkill()) {
 				switch (imbue->imbuetype) {
+					// Melee skill imbuements now boost STR (Power)
 					case ImbuementType::IMBUEMENT_TYPE_FIST_SKILL:
-						setVarSkill(SKILL_FIST, static_cast<int32_t>(imbue->value));
-						break;
 					case ImbuementType::IMBUEMENT_TYPE_CLUB_SKILL:
-						setVarSkill(SKILL_CLUB, static_cast<int32_t>(imbue->value));
-						break;
 					case ImbuementType::IMBUEMENT_TYPE_SWORD_SKILL:
-						setVarSkill(SKILL_SWORD, static_cast<int32_t>(imbue->value));
-						break;
 					case ImbuementType::IMBUEMENT_TYPE_AXE_SKILL:
-						setVarSkill(SKILL_AXE, static_cast<int32_t>(imbue->value));
+						stat_strength += static_cast<uint32_t>(imbue->value);
 						break;
-					case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
-						setVarSkill(SKILL_DISTANCE, static_cast<int32_t>(imbue->value));
-						break;
+					// Shield imbuements boost STR (Guard/defense)
 					case ImbuementType::IMBUEMENT_TYPE_SHIELD_SKILL:
-						setVarSkill(SKILL_SHIELD, static_cast<int32_t>(imbue->value));
+						stat_strength += static_cast<uint32_t>(imbue->value);
 						break;
-					case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
-						setVarSkill(SKILL_FISHING, static_cast<int32_t>(imbue->value));
+					// Distance skill imbuements now boost DEX
+					case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
+						stat_dexterity += static_cast<uint32_t>(imbue->value);
 						break;
+					// Magic level imbuements now boost INT
 					case ImbuementType::IMBUEMENT_TYPE_MAGIC_LEVEL:
-						setVarSkill(SKILL_MAGLEVEL, static_cast<int32_t>(imbue->value));
+						stat_intelligence += static_cast<uint32_t>(imbue->value);
+						break;
+					// Fishing stays as is — not part of combat system
+					case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
 						break;
 				}
 			}
@@ -5696,7 +5355,6 @@ void Player::addItemImbuements(const ItemPtr& item) {
 		}
 	}
 	checkForImbuedEquipment();
-	sendSkills();
 	sendStats();
 }
 
@@ -5706,29 +5364,27 @@ void Player::removeItemImbuements(const ItemPtr& item) {
         for (auto& imbue : *imbues) {
 			if (imbue->isSkill()) {
 				switch (imbue->imbuetype) {
+					// Melee skill imbuements remove STR (Power)
 					case ImbuementType::IMBUEMENT_TYPE_FIST_SKILL:
-						setVarSkill(SKILL_FIST, -static_cast<int32_t>(imbue->value));
-						break;
 					case ImbuementType::IMBUEMENT_TYPE_CLUB_SKILL:
-						setVarSkill(SKILL_CLUB, -static_cast<int32_t>(imbue->value));
-						break;
 					case ImbuementType::IMBUEMENT_TYPE_SWORD_SKILL:
-						setVarSkill(SKILL_SWORD, -static_cast<int32_t>(imbue->value));
-						break;
 					case ImbuementType::IMBUEMENT_TYPE_AXE_SKILL:
-						setVarSkill(SKILL_AXE, -static_cast<int32_t>(imbue->value));
+						stat_strength = std::max<uint32_t>(0, stat_strength - static_cast<uint32_t>(imbue->value));
 						break;
-					case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
-						setVarSkill(SKILL_DISTANCE, -static_cast<int32_t>(imbue->value));
-						break;
+					// Shield imbuements remove STR (Guard/defense)
 					case ImbuementType::IMBUEMENT_TYPE_SHIELD_SKILL:
-						setVarSkill(SKILL_SHIELD, -static_cast<int32_t>(imbue->value));
+						stat_strength = std::max<uint32_t>(0, stat_strength - static_cast<uint32_t>(imbue->value));
 						break;
-					case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
-						setVarSkill(SKILL_FISHING, -static_cast<int32_t>(imbue->value));
+					// Distance skill imbuements remove DEX
+					case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
+						stat_dexterity = std::max<uint32_t>(0, stat_dexterity - static_cast<uint32_t>(imbue->value));
 						break;
+					// Magic level imbuements remove INT
 					case ImbuementType::IMBUEMENT_TYPE_MAGIC_LEVEL:
-						setVarSkill(SKILL_MAGLEVEL, -static_cast<int32_t>(imbue->value));
+						stat_intelligence = std::max<uint32_t>(0, stat_intelligence - static_cast<uint32_t>(imbue->value));
+						break;
+					// Fishing stays as is
+					case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
 						break;
 				}
 			}
@@ -5752,18 +5408,17 @@ void Player::removeItemImbuements(const ItemPtr& item) {
 
 			if (imbue->isStat()) {
 				switch (imbue->imbuetype) {
-				case ImbuementType::IMBUEMENT_TYPE_CAPACITY_BOOST:
-					capacity -= imbue->value;
-					break;
-				case ImbuementType::IMBUEMENT_TYPE_SPEED_BOOST:
-					g_game.changeSpeed(this->getPlayer(), -static_cast<int32_t>(imbue->value));
-					break;
+					case ImbuementType::IMBUEMENT_TYPE_CAPACITY_BOOST:
+						capacity -= imbue->value;
+						break;
+					case ImbuementType::IMBUEMENT_TYPE_SPEED_BOOST:
+						g_game.changeSpeed(this->getPlayer(), -static_cast<int32_t>(imbue->value));
+						break;
 				}
 			}
 		}
 	}
 	checkForImbuedEquipment();
-	sendSkills();
 	sendStats();
 }
 
@@ -5772,61 +5427,58 @@ void Player::removeImbuementEffect(const std::shared_ptr<Imbuement>& imbue) {
 	
 	if (imbue->isSkill()) {
 		switch (imbue->imbuetype) {
-		case ImbuementType::IMBUEMENT_TYPE_FIST_SKILL:
-			setVarSkill(SKILL_FIST, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_CLUB_SKILL:
-			setVarSkill(SKILL_CLUB, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_SWORD_SKILL:
-			setVarSkill(SKILL_SWORD, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_AXE_SKILL:
-			setVarSkill(SKILL_AXE, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
-			setVarSkill(SKILL_DISTANCE, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_SHIELD_SKILL:
-			setVarSkill(SKILL_SHIELD, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
-			setVarSkill(SKILL_FISHING, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_MAGIC_LEVEL:
-			setVarSkill(SKILL_MAGLEVEL, -static_cast<int32_t>(imbue->value));
-			break;
+			// Melee skill imbuements remove STR (Power)
+			case ImbuementType::IMBUEMENT_TYPE_FIST_SKILL:
+			case ImbuementType::IMBUEMENT_TYPE_CLUB_SKILL:
+			case ImbuementType::IMBUEMENT_TYPE_SWORD_SKILL:
+			case ImbuementType::IMBUEMENT_TYPE_AXE_SKILL:
+				stat_strength = std::max<uint32_t>(0, stat_strength - static_cast<uint32_t>(imbue->value));
+				break;
+			// Shield imbuements remove STR (Guard/defense)
+			case ImbuementType::IMBUEMENT_TYPE_SHIELD_SKILL:
+				stat_strength = std::max<uint32_t>(0, stat_strength - static_cast<uint32_t>(imbue->value));
+				break;
+			// Distance skill imbuements remove DEX
+			case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
+				stat_dexterity = std::max<uint32_t>(0, stat_dexterity - static_cast<uint32_t>(imbue->value));
+				break;
+			// Magic level imbuements remove INT
+			case ImbuementType::IMBUEMENT_TYPE_MAGIC_LEVEL:
+				stat_intelligence = std::max<uint32_t>(0, stat_intelligence - static_cast<uint32_t>(imbue->value));
+				break;
+			// Fishing stays as is
+			case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
+				break;
 		}
 	}
 
 	if (imbue->isSpecialSkill()) {
 		switch (imbue->imbuetype) {
-		case ImbuementType::IMBUEMENT_TYPE_MANA_LEECH:
-			setVarSpecialSkill(SPECIALSKILL_MANALEECHAMOUNT, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_LIFE_LEECH:
-			setVarSpecialSkill(SPECIALSKILL_LIFELEECHAMOUNT, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_CRITICAL_CHANCE:
-			setVarSpecialSkill(SPECIALSKILL_CRITICALHITCHANCE, -static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_CRITICAL_AMOUNT:
-			setVarSpecialSkill(SPECIALSKILL_CRITICALHITAMOUNT, -static_cast<int32_t>(imbue->value));
-			break;
+			case ImbuementType::IMBUEMENT_TYPE_MANA_LEECH:
+				setVarSpecialSkill(SPECIALSKILL_MANALEECHAMOUNT, -static_cast<int32_t>(imbue->value));
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_LIFE_LEECH:
+				setVarSpecialSkill(SPECIALSKILL_LIFELEECHAMOUNT, -static_cast<int32_t>(imbue->value));
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_CRITICAL_CHANCE:
+				setVarSpecialSkill(SPECIALSKILL_CRITICALHITCHANCE, -static_cast<int32_t>(imbue->value));
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_CRITICAL_AMOUNT:
+				setVarSpecialSkill(SPECIALSKILL_CRITICALHITAMOUNT, -static_cast<int32_t>(imbue->value));
+				break;
 		}
 	}
 
 	if (imbue->isStat()) {
 		switch (imbue->imbuetype) {
-		case ImbuementType::IMBUEMENT_TYPE_CAPACITY_BOOST:
-			capacity -= imbue->value;
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_SPEED_BOOST:
-			g_game.changeSpeed(this->getPlayer(), -static_cast<int32_t>(imbue->value));
-			break;
+			case ImbuementType::IMBUEMENT_TYPE_CAPACITY_BOOST:
+				capacity -= imbue->value;
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_SPEED_BOOST:
+				g_game.changeSpeed(this->getPlayer(), -static_cast<int32_t>(imbue->value));
+				break;
 		}
 	}
-	sendSkills();
 	sendStats();
 }
 
@@ -5834,61 +5486,58 @@ void Player::addImbuementEffect(const std::shared_ptr<Imbuement>& imbue) {
 
 	if (imbue->isSkill()) {
 		switch (imbue->imbuetype) {
-		case ImbuementType::IMBUEMENT_TYPE_FIST_SKILL:
-			setVarSkill(SKILL_FIST, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_CLUB_SKILL:
-			setVarSkill(SKILL_CLUB, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_SWORD_SKILL:
-			setVarSkill(SKILL_SWORD, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_AXE_SKILL:
-			setVarSkill(SKILL_AXE, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
-			setVarSkill(SKILL_DISTANCE, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_SHIELD_SKILL:
-			setVarSkill(SKILL_SHIELD, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
-			setVarSkill(SKILL_FISHING, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_MAGIC_LEVEL:
-			setVarSkill(SKILL_MAGLEVEL, static_cast<int32_t>(imbue->value));
-			break;
+			// Melee skill imbuements boost STR (Power)
+			case ImbuementType::IMBUEMENT_TYPE_FIST_SKILL:
+			case ImbuementType::IMBUEMENT_TYPE_CLUB_SKILL:
+			case ImbuementType::IMBUEMENT_TYPE_SWORD_SKILL:
+			case ImbuementType::IMBUEMENT_TYPE_AXE_SKILL:
+				stat_strength += static_cast<uint32_t>(imbue->value);
+				break;
+			// Shield imbuements boost STR (Guard/defense)
+			case ImbuementType::IMBUEMENT_TYPE_SHIELD_SKILL:
+				stat_strength += static_cast<uint32_t>(imbue->value);
+				break;
+			// Distance skill imbuements boost DEX
+			case ImbuementType::IMBUEMENT_TYPE_DISTANCE_SKILL:
+				stat_dexterity += static_cast<uint32_t>(imbue->value);
+				break;
+			// Magic level imbuements boost INT
+			case ImbuementType::IMBUEMENT_TYPE_MAGIC_LEVEL:
+				stat_intelligence += static_cast<uint32_t>(imbue->value);
+				break;
+			// Fishing stays as is
+			case ImbuementType::IMBUEMENT_TYPE_FISHING_SKILL:
+				break;
 		}
 	}
 
 	if (imbue->isSpecialSkill()) {
 		switch (imbue->imbuetype) {
-		case ImbuementType::IMBUEMENT_TYPE_MANA_LEECH:
-			setVarSpecialSkill(SPECIALSKILL_MANALEECHAMOUNT, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_LIFE_LEECH:
-			setVarSpecialSkill(SPECIALSKILL_LIFELEECHAMOUNT, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_CRITICAL_CHANCE:
-			setVarSpecialSkill(SPECIALSKILL_CRITICALHITCHANCE, static_cast<int32_t>(imbue->value));
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_CRITICAL_AMOUNT:
-			setVarSpecialSkill(SPECIALSKILL_CRITICALHITAMOUNT, static_cast<int32_t>(imbue->value));
-			break;
+			case ImbuementType::IMBUEMENT_TYPE_MANA_LEECH:
+				setVarSpecialSkill(SPECIALSKILL_MANALEECHAMOUNT, static_cast<int32_t>(imbue->value));
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_LIFE_LEECH:
+				setVarSpecialSkill(SPECIALSKILL_LIFELEECHAMOUNT, static_cast<int32_t>(imbue->value));
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_CRITICAL_CHANCE:
+				setVarSpecialSkill(SPECIALSKILL_CRITICALHITCHANCE, static_cast<int32_t>(imbue->value));
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_CRITICAL_AMOUNT:
+				setVarSpecialSkill(SPECIALSKILL_CRITICALHITAMOUNT, static_cast<int32_t>(imbue->value));
+				break;
 		}
 	}
 
 	if (imbue->isStat()) {
 		switch (imbue->imbuetype) {
-		case ImbuementType::IMBUEMENT_TYPE_CAPACITY_BOOST:
-			capacity += imbue->value;
-			break;
-		case ImbuementType::IMBUEMENT_TYPE_SPEED_BOOST:
-			g_game.changeSpeed(this->getPlayer(), static_cast<int32_t>(imbue->value));
-			break;
+			case ImbuementType::IMBUEMENT_TYPE_CAPACITY_BOOST:
+				capacity += imbue->value;
+				break;
+			case ImbuementType::IMBUEMENT_TYPE_SPEED_BOOST:
+				g_game.changeSpeed(this->getPlayer(), static_cast<int32_t>(imbue->value));
+				break;
 		}
 	}
-	sendSkills();
 	sendStats();
 }
 

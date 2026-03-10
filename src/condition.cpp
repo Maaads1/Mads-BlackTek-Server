@@ -468,7 +468,8 @@ void ConditionAttributes::updatePercentStats(const PlayerPtr& player)
 				break;
 
 			case STAT_MAGICPOINTS:
-				stats[i] = static_cast<int32_t>(player->getBaseMagicLevel() * ((statsPercent[i] - 100) / 100.f));
+				// INT replaces magic level for percent stat conditions
+				stats[i] = static_cast<int32_t>(player->getStatIntelligence() * ((statsPercent[i] - 100) / 100.f));
 				break;
 		}
 	}
@@ -492,36 +493,17 @@ void ConditionAttributes::updateStats(const PlayerPtr& player) const
 
 void ConditionAttributes::updatePercentSkills(const PlayerPtr& player)
 {
-	for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
-		if (skillsPercent[i] == 0) {
-			continue;
-		}
-
-		int32_t unmodifiedSkill = player->getBaseSkill(i);
-		skills[i] = static_cast<int32_t>(unmodifiedSkill * ((skillsPercent[i] - 100) / 100.f));
-	}
+	// Old skill system removed - STR/DEX/INT replace skills
+	// Percent skill conditions no longer apply
 }
 
 void ConditionAttributes::updateSkills(const PlayerPtr& player) const
 {
-	bool needUpdateSkills = false;
-
-	for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
-		if (skills[i]) {
-			needUpdateSkills = true;
-			player->setVarSkill(static_cast<skills_t>(i), skills[i]);
-		}
-	}
-
+	// Old skill system removed - only special skills (crit, leech etc) remain
 	for (int32_t i = SPECIALSKILL_FIRST; i <= SPECIALSKILL_LAST; ++i) {
 		if (specialSkills[i]) {
-			needUpdateSkills = true;
 			player->setVarSpecialSkill(static_cast<SpecialSkills_t>(i), specialSkills[i]);
 		}
-	}
-
-	if (needUpdateSkills) {
-		player->sendSkills();
 	}
 }
 
@@ -533,24 +515,11 @@ bool ConditionAttributes::executeCondition(const CreaturePtr creature, int32_t i
 void ConditionAttributes::endCondition(const CreaturePtr creature)
 {
 	if (const auto player = creature->getPlayer()) {
-		bool needUpdateSkills = false;
-
-		for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
-			if (skills[i] || skillsPercent[i]) {
-				needUpdateSkills = true;
-				player->setVarSkill(static_cast<skills_t>(i), -skills[i]);
-			}
-		}
-
+		// Old skill system removed - only special skills (crit, leech etc) remain
 		for (int32_t i = SPECIALSKILL_FIRST; i <= SPECIALSKILL_LAST; ++i) {
 			if (specialSkills[i]) {
-				needUpdateSkills = true;
 				player->setVarSpecialSkill(static_cast<SpecialSkills_t>(i), -specialSkills[i]);
 			}
-		}
-
-		if (needUpdateSkills) {
-			player->sendSkills();
 		}
 
 		bool needUpdateStats = false;

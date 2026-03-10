@@ -40,11 +40,6 @@ class Guild;
 
 constexpr uint16_t MaximumStamina = 2520;
 
-enum skillsid_t {
-	SKILLVALUE_LEVEL = 0,
-	SKILLVALUE_TRIES = 1,
-	SKILLVALUE_PERCENT = 2,
-};
 
 enum fightMode_t : uint8_t {
 	FIGHTMODE_ATTACK = 1,
@@ -113,14 +108,6 @@ struct OutfitEntry {
 
 	uint16_t lookType;
 	uint8_t addons;
-};
-
-static constexpr int16_t MINIMUM_SKILL_LEVEL = 10;
-
-struct Skill {
-	uint64_t tries = 0;
-	uint16_t level = MINIMUM_SKILL_LEVEL;
-	uint8_t percent = 0;
 };
 
 using MuteCountMap = gtl::btree_map<uint32_t, uint32_t>;
@@ -233,28 +220,6 @@ class Player final : public Creature, public Cylinder
 			return staminaMinutes;
 		}
 
-		bool addOfflineTrainingTries(skills_t skill, uint64_t tries);
-
-		void addOfflineTrainingTime(int32_t addTime) {
-			offlineTrainingTime = std::min<int32_t>(12 * 3600 * 1000, offlineTrainingTime + addTime);
-		}
-	
-		void removeOfflineTrainingTime(int32_t removeTime) {
-			offlineTrainingTime = std::max<int32_t>(0, offlineTrainingTime - removeTime);
-		}
-	
-		int32_t getOfflineTrainingTime() const {
-			return offlineTrainingTime;
-		}
-
-		int32_t getOfflineTrainingSkill() const {
-			return offlineTrainingSkill;
-		}
-	
-		void setOfflineTrainingSkill(int32_t skill) {
-			offlineTrainingSkill = skill;
-		}
-
 		uint64_t getBankBalance() const {
 			return bankBalance;
 		}
@@ -362,10 +327,6 @@ class Player final : public Creature, public Cylinder
 		bool isGuildWarEnemy(const PlayerConstPtr player, bool alliesAsEnemies) const;
 		bool isInWar(const PlayerConstPtr player) const;
 
-		uint64_t getSpentMana() const {
-			return manaSpent;
-		}
-
 		bool hasFlag(PlayerFlags value) const {
 			return (group->flags & value) != 0;
 		}
@@ -469,17 +430,81 @@ class Player final : public Creature, public Cylinder
 			return levelPercent;
 		}
 	
-		uint32_t getMagicLevel() const {
-			return std::max<int32_t>(0, magLevel + varStats[STAT_MAGICPOINTS]);
+		// ── Attribute System ────────────────────────────────────────
+		uint32_t getStatStrength() const { return stat_strength; }
+		uint32_t getStatDexterity() const { return stat_dexterity; }
+		uint32_t getStatIntelligence() const { return stat_intelligence; }
+
+		void setStatStrength(uint32_t value) { stat_strength = value; }
+		void setStatDexterity(uint32_t value) { stat_dexterity = value; }
+		void setStatIntelligence(uint32_t value) { stat_intelligence = value; }
+
+		uint32_t getAttrPoints() const { return attr_points; }
+		void setAttrPoints(uint32_t value) { attr_points = value; }
+		bool spendAttrPoint() {
+			if (attr_points == 0) return false;
+			--attr_points;
+			return true;
 		}
-	
-		uint32_t getBaseMagicLevel() const {
-			return magLevel;
+
+		uint32_t getMasteryPoints() const { return mastery_points; }
+		void setMasteryPoints(uint32_t value) { mastery_points = value; }
+		bool spendMasteryPoint() {
+			if (mastery_points == 0) return false;
+			--mastery_points;
+			return true;
 		}
-	
-		uint8_t getMagicLevelPercent() const {
-			return magLevelPercent;
+
+		uint32_t getRespecTokens() const { return respec_tokens; }
+		void setRespecTokens(uint32_t value) { respec_tokens = value; }
+		bool useRespecToken() {
+			if (respec_tokens == 0) return false;
+			--respec_tokens;
+			return true;
 		}
+
+// Soft cap — returns effective stat value after diminishing returns
+		uint32_t getEffectiveStat(uint32_t rawValue) const {
+			uint32_t effective = 0;
+			if (rawValue <= 30) {
+				effective = rawValue;
+			} else if (rawValue <= 60) {
+				effective = 30 + (rawValue - 30) * 75 / 100;
+			} else if (rawValue <= 90) {
+				effective = 30 + 22 + (rawValue - 60) * 50 / 100;
+			} else {
+				effective = 30 + 22 + 15 + (rawValue - 90) * 25 / 100;
+			}
+			return effective;
+		}
+
+		uint32_t getEffectiveStrength() const { return getEffectiveStat(stat_strength); }
+		uint32_t getEffectiveDexterity() const { return getEffectiveStat(stat_dexterity); }
+		uint32_t getEffectiveIntelligence() const { return getEffectiveStat(stat_intelligence); }
+
+		// Synergy bonus checks
+		bool hasSynergySkirmisher() const { return stat_strength >= 10 && stat_dexterity >= 10; }
+		bool hasSynergyArcaneBlade() const { return stat_strength >= 10 && stat_intelligence >= 10; }
+		bool hasSynergyShadowDancer() const { return stat_dexterity >= 10 && stat_intelligence >= 10; }
+
+		const std::string& getSynergyTitle() const { return synergyTitle; }
+		void setSynergyTitle(const std::string& title) { synergyTitle = title; }
+
+		void updateSynergyTitle() {
+			// Priority order — most specific first
+			if (stat_strength >= 10 && stat_dexterity >= 10 && stat_intelligence >= 10) {
+				synergyTitle = "Transcendent";
+			} else if (stat_strength >= 10 && stat_dexterity >= 10) {
+				synergyTitle = "Skirmisher";
+			} else if (stat_strength >= 10 && stat_intelligence >= 10) {
+				synergyTitle = "Arcane Blade";
+			} else if (stat_dexterity >= 10 && stat_intelligence >= 10) {
+				synergyTitle = "Shadow Dancer";
+			} else {
+				synergyTitle = "Adventurer";
+			}
+		}
+// ────────────────────────────────────────────────────────────
 	
 		uint8_t getSoul() const {
 			return soul;
@@ -592,10 +617,6 @@ class Player final : public Creature, public Cylinder
 	
 		void setItemAbility(slots_t slot, bool enabled) {
 			inventoryAbilities[slot] = enabled;
-		}
-
-		void setVarSkill(skills_t skill, int32_t modifier) {
-			varSkills[skill] += modifier;
 		}
 
 		void setVarSpecialSkill(SpecialSkills_t skill, int32_t modifier) {
@@ -740,18 +761,6 @@ class Player final : public Creature, public Cylinder
 		uint16_t getSpecialSkill(uint8_t skill) const {
 			return std::max<int32_t>(0, varSpecialSkills[skill]);
 		}
-	
-		uint16_t getSkillLevel(uint8_t skill) const {
-			return std::max<int32_t>(0, skills[skill].level + varSkills[skill]);
-		}
-	
-		uint16_t getBaseSkill(uint8_t skill) const {
-			return skills[skill].level;
-		}
-	
-		uint8_t getSkillPercent(uint8_t skill) const {
-			return skills[skill].percent;
-		}
 
 		bool getAddAttackSkill() const {
 			return addAttackSkillPoint;
@@ -768,10 +777,6 @@ class Player final : public Creature, public Cylinder
 
 		void drainHealth(const CreaturePtr& attacker, int32_t damage) override;
 		void drainMana(const CreaturePtr& attacker, int32_t manaLoss);
-		void addManaSpent(uint64_t amount);
-		void removeManaSpent(uint64_t amount, bool notify = false);
-		void addSkillAdvance(skills_t skill, uint64_t count);
-		void removeSkillTries(skills_t skill, uint64_t count, bool notify = false);
 
 		int32_t getArmor() const override;
 		int32_t getDefense() const override;
@@ -1594,7 +1599,6 @@ class Player final : public Creature, public Cylinder
 		std::string tempAccountName;
 		std::string tempPassword;
 
-		Skill skills[SKILL_LAST + 1];
 		LightInfo itemsLight;
 		Position loginPosition;
 		Position lastWalkthroughPosition;
@@ -1604,7 +1608,6 @@ class Player final : public Creature, public Cylinder
 		time_t premiumEndsAt = 0;
 
 		uint64_t experience = 0;
-		uint64_t manaSpent = 0;
 		uint64_t lastAttack = 0;
 		uint64_t bankBalance = 0;
 		uint64_t lastQuestlogUpdate = 0;
@@ -1642,7 +1645,6 @@ class Player final : public Creature, public Cylinder
 		uint32_t conditionImmunities = 0;
 		uint32_t conditionSuppressions = 0;
 		uint32_t level = 1;
-		uint32_t magLevel = 0;
 		uint32_t actionTaskEvent = 0;
 		uint32_t walkTaskEvent = 0;
 		uint32_t classicAttackEvent = 0;
@@ -1654,7 +1656,6 @@ class Player final : public Creature, public Cylinder
 		uint32_t editListId = 0;
 		uint32_t mana = 0;
 		uint32_t manaMax = 0;
-		int32_t varSkills[SKILL_LAST + 1] = {};
 		int32_t varSpecialSkills[SPECIALSKILL_LAST + 1] = {};
 		int32_t varStats[STAT_LAST + 1] = {};
 		int32_t purchaseCallback = -1;
@@ -1662,18 +1663,23 @@ class Player final : public Creature, public Cylinder
 		int32_t MessageBufferCount = 0;
 		int32_t bloodHitCount = 0;
 		int32_t shieldBlockCount = 0;
-		int32_t offlineTrainingSkill = -1;
-		int32_t offlineTrainingTime = 0;
 		int32_t idleTime = 0;
 
-		uint16_t lastStatsTrainingTime = 0;
 		uint16_t staminaMinutes = 2520;
 		uint16_t maxWriteLen = 0;
-
+		
+		// ── Attribute System ────────────────────────────────────────
+		uint32_t stat_strength = 0;
+		uint32_t stat_dexterity = 0;
+		uint32_t stat_intelligence = 0;
+		uint32_t attr_points = 3;
+		uint32_t mastery_points = 0;
+		uint32_t respec_tokens = 0;
+		std::string synergyTitle = "Adventurer";
+		// ────────────────────────────────────────────────────────────
 		uint8_t soul = 0;
 		std::bitset<6> blessings;
 		uint8_t levelPercent = 0;
-		uint8_t magLevelPercent = 0;
 		uint8_t accountManagerState = 0;
 
 
@@ -1700,8 +1706,6 @@ class Player final : public Creature, public Cylinder
 		void updateItemsLight(bool internal = false);
 		int32_t getStepSpeed() const override;
 		void updateBaseSpeed();
-
-		bool isPromoted() const;
 
 		uint32_t getAttackSpeed() const;
 

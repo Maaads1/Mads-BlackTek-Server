@@ -3631,7 +3631,6 @@ void ProtocolGame::AddPlayerStats(NetworkMessage& msg) const
 	msg.add<uint16_t>(player->getLevel());
 	msg.addByte(player->getLevelPercent());
 
-	// todo : convert these to ServerSpecial Codes
 	msg.add<uint16_t>(100); // base xp gain rate
 	msg.add<uint16_t>(0); // xp voucher
 	msg.add<uint16_t>(0); // low level bonus
@@ -3641,9 +3640,10 @@ void ProtocolGame::AddPlayerStats(NetworkMessage& msg) const
 	msg.add<uint16_t>(std::min<int32_t>(player->getMana(), std::numeric_limits<uint16_t>::max()));
 	msg.add<uint16_t>(std::min<int32_t>(player->getMaxMana(), std::numeric_limits<uint16_t>::max()));
 
-	msg.addByte(std::min<uint32_t>(player->getMagicLevel(), std::numeric_limits<uint8_t>::max()));
-	msg.addByte(std::min<uint32_t>(player->getBaseMagicLevel(), std::numeric_limits<uint8_t>::max()));
-	msg.addByte(player->getMagicLevelPercent());
+	// Use INT for magic level field (client expects these bytes)
+	msg.addByte(std::min<uint32_t>(player->getStatIntelligence(), std::numeric_limits<uint8_t>::max()));
+	msg.addByte(std::min<uint32_t>(player->getStatIntelligence(), std::numeric_limits<uint8_t>::max()));
+	msg.addByte(0); // magic level percent no longer used
 
 	msg.addByte(player->getSoul());
 
@@ -3654,7 +3654,7 @@ void ProtocolGame::AddPlayerStats(NetworkMessage& msg) const
 	Condition* condition = player->getCondition(CONDITION_REGENERATION, CONDITIONID_DEFAULT);
 	msg.add<uint16_t>(condition ? condition->getTicks() / 1000 : 0);
 
-	msg.add<uint16_t>(player->getOfflineTrainingTime() / 60 / 1000);
+	msg.add<uint16_t>(0); // offline training time removed
 
 	msg.add<SpecialCode>(SpecialCode::Zero); // xp boost time (seconds)
 	msg.add(CommonCode::Zero); // enables exp boost in the store
@@ -3664,11 +3664,26 @@ void ProtocolGame::AddPlayerSkills(NetworkMessage& msg) const
 {
 	msg.add(ServerCode::PlayerSkills);
 
-	for (uint8_t i = SKILL_FIRST; i <= SKILL_LAST; ++i)
-	{
-		msg.add<uint16_t>(std::min<int32_t>(player->getSkillLevel(i), std::numeric_limits<uint16_t>::max()));
-		msg.add<uint16_t>(player->getBaseSkill(i));
-		msg.addByte(player->getSkillPercent(i));
+	// Send STR/DEX/INT in the skill slots the client expects
+	// STR in first slot, DEX in second, INT in third, rest zeroed
+	auto sendStatAsSkill = [&](uint32_t value) {
+		msg.add<uint16_t>(std::min<uint32_t>(value, std::numeric_limits<uint16_t>::max()));
+		msg.add<uint16_t>(std::min<uint32_t>(value, std::numeric_limits<uint16_t>::max()));
+		msg.addByte(0);
+	};
+
+	sendStatAsSkill(player->getStatStrength());
+	sendStatAsSkill(player->getStatDexterity());
+	sendStatAsSkill(player->getStatIntelligence());
+	sendStatAsSkill(player->getAttrPoints());
+	sendStatAsSkill(player->getMasteryPoints());
+	sendStatAsSkill(player->getRespecTokens());
+
+	// Pad remaining skill slots with zeros to keep packet size correct
+	for (uint8_t i = 6; i <= SKILL_LAST; ++i) {
+		msg.add<uint16_t>(0);
+		msg.add<uint16_t>(0);
+		msg.addByte(0);
 	}
 
 	for (uint8_t i = SPECIALSKILL_FIRST; i <= SPECIALSKILL_LAST; ++i)

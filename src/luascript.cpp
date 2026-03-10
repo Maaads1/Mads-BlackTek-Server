@@ -2706,36 +2706,31 @@ void LuaScriptInterface::registerFunctions()
 	registerMethod("Player", "removeExperience", luaPlayerRemoveExperience);
 	registerMethod("Player", "getLevel", luaPlayerGetLevel);
 
-	registerMethod("Player", "getMagicLevel", luaPlayerGetMagicLevel);
-	registerMethod("Player", "getBaseMagicLevel", luaPlayerGetBaseMagicLevel);
+	registerMethod("Player", "getStatStrength", luaPlayerGetStatStrength);
+	registerMethod("Player", "getStatDexterity", luaPlayerGetStatDexterity);
+	registerMethod("Player", "getStatIntelligence", luaPlayerGetStatIntelligence);
+	registerMethod("Player", "getAttrPoints", luaPlayerGetAttrPoints);
+	registerMethod("Player", "getMasteryPoints", luaPlayerGetMasteryPoints);
+	registerMethod("Player", "getRespecTokens", luaPlayerGetRespecTokens);
+	registerMethod("Player", "setStatStrength", luaPlayerSetStatStrength);
+	registerMethod("Player", "setStatDexterity", luaPlayerSetStatDexterity);
+	registerMethod("Player", "setStatIntelligence", luaPlayerSetStatIntelligence);
+	registerMethod("Player", "setAttrPoints", luaPlayerSetAttrPoints);
+	registerMethod("Player", "setMasteryPoints", luaPlayerSetMasteryPoints);
+	registerMethod("Player", "spendAttrPoint", luaPlayerSpendAttrPoint);
+	registerMethod("Player", "spendMasteryPoint", luaPlayerSpendMasteryPoint);
+	registerMethod("Player", "useRespecToken", luaPlayerUseRespecToken);
+
 	registerMethod("Player", "getMana", luaPlayerGetMana);
 	registerMethod("Player", "addMana", luaPlayerAddMana);
 	registerMethod("Player", "getMaxMana", luaPlayerGetMaxMana);
 	registerMethod("Player", "setMaxMana", luaPlayerSetMaxMana);
-	registerMethod("Player", "getManaSpent", luaPlayerGetManaSpent);
-	registerMethod("Player", "addManaSpent", luaPlayerAddManaSpent);
-	registerMethod("Player", "removeManaSpent", luaPlayerRemoveManaSpent);
 
 	registerMethod("Player", "getBaseMaxHealth", luaPlayerGetBaseMaxHealth);
 	registerMethod("Player", "getBaseMaxMana", luaPlayerGetBaseMaxMana);
 
-	registerMethod("Player", "getSkillLevel", luaPlayerGetSkillLevel);
-	registerMethod("Player", "getEffectiveSkillLevel", luaPlayerGetEffectiveSkillLevel);
-	registerMethod("Player", "getSkillPercent", luaPlayerGetSkillPercent);
-	registerMethod("Player", "getSkillTries", luaPlayerGetSkillTries);
-	registerMethod("Player", "addSkillTries", luaPlayerAddSkillTries);
-	registerMethod("Player", "removeSkillTries", luaPlayerRemoveSkillTries);
 	registerMethod("Player", "getSpecialSkill", luaPlayerGetSpecialSkill);
 	registerMethod("Player", "addSpecialSkill", luaPlayerAddSpecialSkill);
-
-	registerMethod("Player", "addOfflineTrainingTime", luaPlayerAddOfflineTrainingTime);
-	registerMethod("Player", "getOfflineTrainingTime", luaPlayerGetOfflineTrainingTime);
-	registerMethod("Player", "removeOfflineTrainingTime", luaPlayerRemoveOfflineTrainingTime);
-
-	registerMethod("Player", "addOfflineTrainingTries", luaPlayerAddOfflineTrainingTries);
-
-	registerMethod("Player", "getOfflineTrainingSkill", luaPlayerGetOfflineTrainingSkill);
-	registerMethod("Player", "setOfflineTrainingSkill", luaPlayerSetOfflineTrainingSkill);
 
 	registerMethod("Player", "getItemCount", luaPlayerGetItemCount);
 	registerMethod("Player", "getItemById", luaPlayerGetItemById);
@@ -2947,9 +2942,6 @@ void LuaScriptInterface::registerFunctions()
 	registerMethod("Vocation", "getClientId", luaVocationGetClientId);
 	registerMethod("Vocation", "getName", luaVocationGetName);
 	registerMethod("Vocation", "getDescription", luaVocationGetDescription);
-
-	registerMethod("Vocation", "getRequiredSkillTries", luaVocationGetRequiredSkillTries);
-	registerMethod("Vocation", "getRequiredManaSpent", luaVocationGetRequiredManaSpent);
 
 	registerMethod("Vocation", "getCapacityGain", luaVocationGetCapacityGain);
 
@@ -11787,22 +11779,66 @@ int LuaScriptInterface::luaPlayerGetLevel(lua_State* L)
 	return 1;
 }
 
-int LuaScriptInterface::luaPlayerGetMagicLevel(lua_State* L)
+int LuaScriptInterface::luaPlayerGetStatStrength(lua_State* L)
 {
-	// player:getMagicLevel()
+	// player:getStatStrength()
 	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		lua_pushinteger(L, player->getMagicLevel());
+		lua_pushinteger(L, player->getStatStrength());
 	} else {
 		lua_pushnil(L);
 	}
 	return 1;
 }
 
-int LuaScriptInterface::luaPlayerGetBaseMagicLevel(lua_State* L)
+int LuaScriptInterface::luaPlayerGetStatDexterity(lua_State* L)
 {
-	// player:getBaseMagicLevel()
+	// player:getStatDexterity()
 	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		lua_pushinteger(L, player->getBaseMagicLevel());
+		lua_pushinteger(L, player->getStatDexterity());
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerGetStatIntelligence(lua_State* L)
+{
+	// player:getStatIntelligence()
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		lua_pushinteger(L, player->getStatIntelligence());
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerGetAttrPoints(lua_State* L)
+{
+	// player:getAttrPoints()
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		lua_pushinteger(L, player->getAttrPoints());
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerGetMasteryPoints(lua_State* L)
+{
+	// player:getMasteryPoints()
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		lua_pushinteger(L, player->getMasteryPoints());
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerGetRespecTokens(lua_State* L)
+{
+	// player:getRespecTokens()
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		lua_pushinteger(L, player->getRespecTokens());
 	} else {
 		lua_pushnil(L);
 	}
@@ -11868,41 +11904,6 @@ int LuaScriptInterface::luaPlayerSetMaxMana(lua_State* L)
 	return 1;
 }
 
-int LuaScriptInterface::luaPlayerGetManaSpent(lua_State* L)
-{
-	// player:getManaSpent()
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		lua_pushinteger(L, player->getSpentMana());
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerAddManaSpent(lua_State* L)
-{
-	// player:addManaSpent(amount)
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		player->addManaSpent(getNumber<uint64_t>(L, 2));
-		pushBoolean(L, true);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerRemoveManaSpent(lua_State* L)
-{
-	// player:removeManaSpent(amount[, notify = true])
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		player->removeManaSpent(getNumber<uint64_t>(L, 2), getBoolean(L, 3, true));
-		pushBoolean(L, true);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
 int LuaScriptInterface::luaPlayerGetBaseMaxHealth(lua_State* L)
 {
 	// player:getBaseMaxHealth()
@@ -11925,65 +11926,11 @@ int LuaScriptInterface::luaPlayerGetBaseMaxMana(lua_State* L)
 	return 1;
 }
 
-int LuaScriptInterface::luaPlayerGetSkillLevel(lua_State* L)
+int LuaScriptInterface::luaPlayerSetStatStrength(lua_State* L)
 {
-	// player:getSkillLevel(skillType)
-	const auto skillType = getNumber<skills_t>(L, 2);
-	const auto player = getSharedPtr<Player>(L, 1);
-	if (player && skillType <= SKILL_LAST) {
-		lua_pushinteger(L, player->skills[skillType].level);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerGetEffectiveSkillLevel(lua_State* L)
-{
-	// player:getEffectiveSkillLevel(skillType)
-	const auto skillType = getNumber<skills_t>(L, 2);
-	const auto player = getSharedPtr<Player>(L, 1);
-	if (player && skillType <= SKILL_LAST) {
-		lua_pushinteger(L, player->getSkillLevel(skillType));
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerGetSkillPercent(lua_State* L)
-{
-	// player:getSkillPercent(skillType)
-	const auto skillType = getNumber<skills_t>(L, 2);
-	const auto player = getSharedPtr<Player>(L, 1);
-	if (player && skillType <= SKILL_LAST) {
-		lua_pushinteger(L, player->skills[skillType].percent);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerGetSkillTries(lua_State* L)
-{
-	// player:getSkillTries(skillType)
-	const auto skillType = getNumber<skills_t>(L, 2);
-	const auto player = getSharedPtr<Player>(L, 1);
-	if (player && skillType <= SKILL_LAST) {
-		lua_pushinteger(L, player->skills[skillType].tries);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerAddSkillTries(lua_State* L)
-{
-	// player:addSkillTries(skillType, tries)
+	// player:setStatStrength(value)
 	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		const auto skillType = getNumber<skills_t>(L, 2);
-		const auto tries = getNumber<uint64_t>(L, 3);
-		player->addSkillAdvance(skillType, tries);
+		player->setStatStrength(getNumber<uint32_t>(L, 2));
 		pushBoolean(L, true);
 	} else {
 		lua_pushnil(L);
@@ -11991,14 +11938,95 @@ int LuaScriptInterface::luaPlayerAddSkillTries(lua_State* L)
 	return 1;
 }
 
-int LuaScriptInterface::luaPlayerRemoveSkillTries(lua_State* L)
+int LuaScriptInterface::luaPlayerSetStatDexterity(lua_State* L)
 {
-	// player:removeSkillTries(skillType, tries[, notify = true])
+	// player:setStatDexterity(value)
 	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		const auto skillType = getNumber<skills_t>(L, 2);
-		const uint64_t tries = getNumber<uint64_t>(L, 3);
-		player->removeSkillTries(skillType, tries, getBoolean(L, 4, true));
+		player->setStatDexterity(getNumber<uint32_t>(L, 2));
 		pushBoolean(L, true);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerSetStatIntelligence(lua_State* L)
+{
+	// player:setStatIntelligence(value)
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		player->setStatIntelligence(getNumber<uint32_t>(L, 2));
+		pushBoolean(L, true);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerSetAttrPoints(lua_State* L)
+{
+	// player:setAttrPoints(value)
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		player->setAttrPoints(getNumber<uint32_t>(L, 2));
+		pushBoolean(L, true);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerSetMasteryPoints(lua_State* L)
+{
+	// player:setMasteryPoints(value)
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		player->setMasteryPoints(getNumber<uint32_t>(L, 2));
+		pushBoolean(L, true);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerSpendAttrPoint(lua_State* L)
+{
+	// player:spendAttrPoint(stat) -- stat: "strength", "dexterity", "intelligence"
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		const std::string stat = getString(L, 2);
+		if (stat == "strength") {
+			player->setStatStrength(player->getStatStrength() + 1);
+		} else if (stat == "dexterity") {
+			player->setStatDexterity(player->getStatDexterity() + 1);
+		} else if (stat == "intelligence") {
+			player->setStatIntelligence(player->getStatIntelligence() + 1);
+		} else {
+			lua_pushnil(L);
+			return 1;
+		}
+		pushBoolean(L, player->spendAttrPoint());
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerSpendMasteryPoint(lua_State* L)
+{
+	// player:spendMasteryPoint(perk)
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		const std::string perk = getString(L, 2);
+		// Perk application will be handled in Lua scripts
+		// Here we just deduct the mastery point
+		pushBoolean(L, player->spendMasteryPoint());
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int LuaScriptInterface::luaPlayerUseRespecToken(lua_State* L)
+{
+	// player:useRespecToken()
+	if (const auto player = getSharedPtr<Player>(L, 1)) {
+		pushBoolean(L, player->useRespecToken());
 	} else {
 		lua_pushnil(L);
 	}
@@ -12036,82 +12064,6 @@ int LuaScriptInterface::luaPlayerAddSpecialSkill(lua_State* L)
 	player->setVarSpecialSkill(specialSkillType, getNumber<int32_t>(L, 3));
 	player->sendSkills();
 	pushBoolean(L, true);
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerAddOfflineTrainingTime(lua_State* L)
-{
-	// player:addOfflineTrainingTime(time)
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		const int32_t time = getNumber<int32_t>(L, 2);
-		player->addOfflineTrainingTime(time);
-		player->sendStats();
-		pushBoolean(L, true);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerGetOfflineTrainingTime(lua_State* L)
-{
-	// player:getOfflineTrainingTime()
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		lua_pushinteger(L, player->getOfflineTrainingTime());
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerRemoveOfflineTrainingTime(lua_State* L)
-{
-	// player:removeOfflineTrainingTime(time)
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		const int32_t time = getNumber<int32_t>(L, 2);
-		player->removeOfflineTrainingTime(time);
-		player->sendStats();
-		pushBoolean(L, true);
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerAddOfflineTrainingTries(lua_State* L)
-{
-	// player:addOfflineTrainingTries(skillType, tries)
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		const auto skillType = getNumber<skills_t>(L, 2);
-		const uint64_t tries = getNumber<uint64_t>(L, 3);
-		pushBoolean(L, player->addOfflineTrainingTries(skillType, tries));
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerGetOfflineTrainingSkill(lua_State* L)
-{
-	// player:getOfflineTrainingSkill()
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		lua_pushinteger(L, player->getOfflineTrainingSkill());
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaPlayerSetOfflineTrainingSkill(lua_State* L)
-{
-	// player:setOfflineTrainingSkill(skillId)
-	if (const auto player = getSharedPtr<Player>(L, 1)) {
-		const int32_t skillId = getNumber<int32_t>(L, 2);
-		player->setOfflineTrainingSkill(skillId);
-		pushBoolean(L, true);
-	} else {
-		lua_pushnil(L);
-	}
 	return 1;
 }
 
@@ -13178,12 +13130,10 @@ int LuaScriptInterface::luaPlayerCanLearnSpell(lua_State* L)
 		return 1;
 	}
 
-	const auto& vocMap = spell->getVocMap();
-	if (!vocMap.contains(player->getVocationId())) {
+	if (player->getLevel() < spell->getLevel()) {
 		pushBoolean(L, false);
-	} else if (player->getLevel() < spell->getLevel()) {
-		pushBoolean(L, false);
-	} else if (player->getMagicLevel() < spell->getMagicLevel()) {
+	} else if (player->getStatIntelligence() < spell->getMagicLevel()) {
+		// INT replaces magic level requirement for spell learning
 		pushBoolean(L, false);
 	} else {
 		pushBoolean(L, true);
@@ -14553,31 +14503,6 @@ int LuaScriptInterface::luaVocationGetDescription(lua_State* L)
 	// vocation:getDescription()
 	if (const auto vocation = getUserdata<Vocation>(L, 1)) {
 		pushString(L, vocation->getVocDescription());
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaVocationGetRequiredSkillTries(lua_State* L)
-{
-	// vocation:getRequiredSkillTries(skillType, skillLevel)
-	if (const auto vocation = getUserdata<Vocation>(L, 1)) {
-		const auto skillType = getNumber<skills_t>(L, 2);
-		const uint16_t skillLevel = getNumber<uint16_t>(L, 3);
-		lua_pushinteger(L, vocation->getReqSkillTries(skillType, skillLevel));
-	} else {
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-int LuaScriptInterface::luaVocationGetRequiredManaSpent(lua_State* L)
-{
-	// vocation:getRequiredManaSpent(magicLevel)
-	if (const auto vocation = getUserdata<Vocation>(L, 1)) {
-		const uint32_t magicLevel = getNumber<uint32_t>(L, 2);
-		lua_pushinteger(L, vocation->getReqMana(magicLevel));
 	} else {
 		lua_pushnil(L);
 	}

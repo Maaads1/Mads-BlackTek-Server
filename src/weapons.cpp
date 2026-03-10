@@ -346,20 +346,16 @@ int32_t Weapon::playerWeaponCheck(const PlayerConstPtr& player, const CreatureCo
 			return 0;
 		}
 
-		if (!vocWeaponMap.empty()) {
-			if (!vocWeaponMap.contains(player->getVocationId())) {
-				return 0;
-			}
-		}
-
 		int32_t damageModifier = 100;
 		if (player->getLevel() < getReqLevel()) {
 			damageModifier = (isWieldedUnproperly() ? damageModifier / 2 : 0);
 		}
 
-		if (player->getMagicLevel() < getReqMagLv()) {
+		// INT replaces magic level requirement for wielding weapons
+		if (player->getStatIntelligence() < getReqMagLv()) {
 			damageModifier = (isWieldedUnproperly() ? damageModifier / 2 : 0);
 		}
+
 		return damageModifier;
 	}
 
@@ -369,16 +365,11 @@ int32_t Weapon::playerWeaponCheck(const PlayerConstPtr& player, const CreatureCo
 bool Weapon::ammoCheck(const PlayerConstPtr& player) const
 {
 	if (!player->hasFlag(PlayerFlag_IgnoreWeaponCheck)) {
+		// INT replaces magic level requirement for ammo check
 		if (!enabled || player->getMana() < getManaCost(player) || player->getHealth() < getHealthCost(player) ||
 			(isPremium() && !player->isPremium()) || player->getLevel() < getReqLevel() ||
-			player->getMagicLevel() < getReqMagLv() || player->getSoul() < soul) {
+			player->getStatIntelligence() < getReqMagLv() || player->getSoul() < soul) {
 			return false;
-		}
-
-		if (!vocWeaponMap.empty()) {
-			if (!vocWeaponMap.contains(player->getVocationId())) {
-				return false;
-			}
 		}
 	}
 
@@ -403,7 +394,8 @@ bool Weapon::useFist(const PlayerPtr& player, const CreaturePtr& target)
 	}
 
 	float attackFactor = player->getAttackFactor();
-	int32_t attackSkill = player->getSkillLevel(SKILL_FIST);
+	// STR replaces fist skill for unarmed combat
+	int32_t attackSkill = player->getEffectiveStrength();
 	int32_t attackValue = 7;
 
 	int32_t maxDamage = Weapons::getMaxWeaponDamage(player->getLevel(), attackSkill, attackValue, attackFactor);
@@ -419,10 +411,6 @@ bool Weapon::useFist(const PlayerPtr& player, const CreaturePtr& target)
 	damage.primary.value = -normal_random(0, maxDamage);
 
 	Combat::doTargetCombat(player, target, damage, params);
-	if (!player->hasFlag(PlayerFlag_NotGainSkill) && player->getAddAttackSkill()) {
-		player->addSkillAdvance(SKILL_FIST, 1);
-	}
-
 	return true;
 }
 
@@ -466,17 +454,8 @@ void Weapon::internalUseWeapon(const PlayerPtr& player, const ItemPtr& item, con
 
 void Weapon::onUsedWeapon(const PlayerPtr& player, const ItemPtr& item, const TilePtr& destTile) const
 {
-	if (!player->hasFlag(PlayerFlag_NotGainSkill)) {
-		skills_t skillType;
-		uint32_t skillPoint;
-		if (getSkillType(player, item, skillType, skillPoint)) {
-			player->addSkillAdvance(skillType, skillPoint);
-		}
-	}
-
 	uint32_t manaCost = getManaCost(player);
 	if (manaCost != 0) {
-		player->addManaSpent(manaCost);
 		player->changeMana(-static_cast<int32_t>(manaCost));
 	}
 
@@ -735,7 +714,8 @@ bool WeaponDistance::useWeapon(const PlayerPtr player, const ItemPtr item, const
 	uint32_t chance;
 	if (it.hitChance == 0) 
 	{
-		const uint32_t skill = player->getSkillLevel(SKILL_DISTANCE);
+		// DEX replaces distance skill for ranged combat
+		const uint32_t skill = player->getEffectiveDexterity();
 		const uint32_t distance = std::min(7u, std::max<uint32_t>(
 			Position::getDistanceX(playerPos, targetPos),
 			Position::getDistanceY(playerPos, targetPos)));
@@ -814,7 +794,8 @@ int32_t WeaponDistance::getElementDamage(const PlayerConstPtr& player, const Cre
 		}
 	}
 
-	int32_t attackSkill = player->getSkillLevel(SKILL_DISTANCE);
+	// DEX replaces distance skill for ranged element damage
+	int32_t attackSkill = player->getEffectiveDexterity();
 	float attackFactor = player->getAttackFactor();
 
 	int32_t minValue = 0;
@@ -827,15 +808,13 @@ int32_t WeaponDistance::getElementDamage(const PlayerConstPtr& player, const Cre
 		}
 	}
 
-	return -normal_random(minValue, static_cast<int32_t>(maxValue * player->getVocation()->distDamageMultiplier));
+	return -normal_random(minValue, maxValue);
 }
 
 int32_t WeaponDistance::getWeaponDamage(const PlayerConstPtr& player, const CreatureConstPtr& target, const ItemConstPtr& item, bool maxDamage /*= false*/) const 
 {
-
 	const int32_t playerLevel = player->getLevel();
 	const float playerAttackFactor = player->getAttackFactor();
-	const auto& playerVocation = player->getVocation();
 	int32_t attackValue = item->getAttack();
 
 	if (item->getWeaponType() == WEAPON_AMMO) 
@@ -846,9 +825,9 @@ int32_t WeaponDistance::getWeaponDamage(const PlayerConstPtr& player, const Crea
 		}
 	}
 
-	int32_t attackSkill = player->getSkillLevel(SKILL_DISTANCE);
-	const float distDamageMultiplier = playerVocation->distDamageMultiplier;
-	int32_t maxValue = static_cast<int32_t>(Weapons::getMaxWeaponDamage(playerLevel, attackSkill, attackValue, playerAttackFactor) * distDamageMultiplier);
+	// DEX replaces distance skill for ranged weapon damage
+	int32_t attackSkill = player->getEffectiveDexterity();
+	int32_t maxValue = Weapons::getMaxWeaponDamage(playerLevel, attackSkill, attackValue, playerAttackFactor);
 
 	if (maxDamage) 
 	{

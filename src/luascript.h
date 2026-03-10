@@ -1149,36 +1149,31 @@ class LuaScriptInterface
 		static int luaPlayerRemoveExperience(lua_State* L);
 		static int luaPlayerGetLevel(lua_State* L);
 
-		static int luaPlayerGetMagicLevel(lua_State* L);
-		static int luaPlayerGetBaseMagicLevel(lua_State* L);
+		static int luaPlayerGetStatStrength(lua_State* L);
+		static int luaPlayerGetStatDexterity(lua_State* L);
+		static int luaPlayerGetStatIntelligence(lua_State* L);
+		static int luaPlayerGetAttrPoints(lua_State* L);
+		static int luaPlayerGetMasteryPoints(lua_State* L);
+		static int luaPlayerGetRespecTokens(lua_State* L);
+		static int luaPlayerSetStatStrength(lua_State* L);
+		static int luaPlayerSetStatDexterity(lua_State* L);
+		static int luaPlayerSetStatIntelligence(lua_State* L);
+		static int luaPlayerSetAttrPoints(lua_State* L);
+		static int luaPlayerSetMasteryPoints(lua_State* L);
+		static int luaPlayerSpendAttrPoint(lua_State* L);
+		static int luaPlayerSpendMasteryPoint(lua_State* L);
+		static int luaPlayerUseRespecToken(lua_State* L);
+
 		static int luaPlayerGetMana(lua_State* L);
 		static int luaPlayerAddMana(lua_State* L);
 		static int luaPlayerGetMaxMana(lua_State* L);
 		static int luaPlayerSetMaxMana(lua_State* L);
-		static int luaPlayerGetManaSpent(lua_State* L);
-		static int luaPlayerAddManaSpent(lua_State* L);
-		static int luaPlayerRemoveManaSpent(lua_State* L);
 
 		static int luaPlayerGetBaseMaxHealth(lua_State* L);
 		static int luaPlayerGetBaseMaxMana(lua_State* L);
 
-		static int luaPlayerGetSkillLevel(lua_State* L);
-		static int luaPlayerGetEffectiveSkillLevel(lua_State* L);
-		static int luaPlayerGetSkillPercent(lua_State* L);
-		static int luaPlayerGetSkillTries(lua_State* L);
-		static int luaPlayerAddSkillTries(lua_State* L);
-		static int luaPlayerRemoveSkillTries(lua_State* L);
 		static int luaPlayerGetSpecialSkill(lua_State* L);
 		static int luaPlayerAddSpecialSkill(lua_State* L);
-
-		static int luaPlayerAddOfflineTrainingTime(lua_State* L);
-		static int luaPlayerGetOfflineTrainingTime(lua_State* L);
-		static int luaPlayerRemoveOfflineTrainingTime(lua_State* L);
-
-		static int luaPlayerAddOfflineTrainingTries(lua_State* L);
-
-		static int luaPlayerGetOfflineTrainingSkill(lua_State* L);
-		static int luaPlayerSetOfflineTrainingSkill(lua_State* L);
 
 		static int luaPlayerGetItemCount(lua_State* L);
 		static int luaPlayerGetItemById(lua_State* L);
@@ -1386,9 +1381,6 @@ class LuaScriptInterface
 		static int luaVocationGetClientId(lua_State* L);
 		static int luaVocationGetName(lua_State* L);
 		static int luaVocationGetDescription(lua_State* L);
-
-		static int luaVocationGetRequiredSkillTries(lua_State* L);
-		static int luaVocationGetRequiredManaSpent(lua_State* L);
 
 		static int luaVocationGetCapacityGain(lua_State* L);
 

@@ -70,8 +70,8 @@ timeBetweenExActions = 1000
 
 -- Map and assets.dat
 -- NOTE: set mapName WITHOUT .otbm at the end
-mapName = "forgotten"
-mapAuthor = "Komic"
+mapName = "test"
+mapAuthor = "mads"
 assetsDatPath = "data/items/assets.dat"
 
 -- Market
@@ -81,10 +81,10 @@ checkExpiredMarketOffersEachMinutes = 60
 maxMarketOffersAtATimePerPlayer = 100
 
 -- MySQL
-mysqlHost = "server-db"
-mysqlUser = "blacktekserver"
-mysqlPass = "blacktekpassword"
-mysqlDatabase = "blacktekserver"
+mysqlHost = "::1"
+mysqlUser = "root"
+mysqlPass = ""
+mysqlDatabase = "theworld"
 mysqlPort = 3306
 mysqlSock = ""
 

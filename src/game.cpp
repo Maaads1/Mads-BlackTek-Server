@@ -7047,20 +7047,9 @@ void Game::playerAnswerModalWindow(const uint32_t playerId, const uint32_t modal
 
 	player->onModalWindowHandled(modalWindowId);
 
-	// offline training, hard-coded
+	// offline training removed - skill system replaced with STR/DEX/INT
 	if (modalWindowId == std::numeric_limits<uint32_t>::max()) {
-		if (button == offlineTrainingWindow.defaultEnterButton) {
-			if (choice == SKILL_SWORD || choice == SKILL_AXE || choice == SKILL_CLUB || choice == SKILL_DISTANCE || choice == SKILL_MAGLEVEL) {
-				const auto bedItem = player->getBedItem();
-				if (bedItem && bedItem->sleep(player)) {
-					player->setOfflineTrainingSkill(choice);
-					return;
-				}
-			}
-		} else {
-			player->sendTextMessage(MESSAGE_EVENT_ADVANCE, "Offline training aborted.");
-		}
-
+		player->sendTextMessage(MESSAGE_EVENT_ADVANCE, "Offline training is no longer available.");
 		player->setBedItem(nullptr);
 	} else {
 		for (auto creatureEvent : player->getCreatureEvents(CREATURE_EVENT_MODALWINDOW)) {
